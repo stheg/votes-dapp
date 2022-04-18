@@ -16,28 +16,53 @@ describe("VotingFactory", function () {
   })
   
   it("should be deployed", async function () {
-    expect(votingFactory.address).to.be.properAddress
+    expect(votingFactory.address).is.properAddress;
   });
 
-  it("should NOT add a new voting", async function () {
-    let a = false;
+  it("should NOT add a new voting without candidates", async function () {
+    let err;
     try {
       await votingFactory.addVoting([]);
     } catch (error) {
-      a = true;
+      err = error;
     }
-    assert(a);
+    expect(err).is.not.undefined;
   });
 
   it("should add a new voting", async function () {
     await votingFactory.addVoting([cand1.address, cand2.address]);
-    let v = await votingFactory.getVoting(0);
+    let v = await votingFactory.getVotings();
+    expect(v.length).eq(1);
+  });
 
-    // console.log("end date: " + new Date(v[0].endDate * 1000).toLocaleString());
-    // console.log("winner: " + v[0].winner);
-    // console.log("candidates: " + v[0].candidates);
-    // console.log("votes number: " + v[1]);
-    
-    expect(v).is.not.undefined;
+  it("should be possible to have more than 1 voting", async function () {
+    await votingFactory.addVoting([cand1.address, cand2.address]);
+    await votingFactory.addVoting([cand1.address, cand2.address]);
+
+    let v = await votingFactory.getVotings();
+    expect(v.length).eq(2);
+  });
+ 
+  it("should add a new vote from p1 for cand1", async function () {
+    await votingFactory.addVoting([cand1.address, cand2.address]);
+    let votingId = 0;
+    await votingFactory.connect(p1).vote(votingId, cand1.address);
+
+    let v = await votingFactory.getVotingDetails(0);
+    expect(v[1].length).eq(1);
+  });
+
+  it("should NOT add a second vote from p1", async function () {
+    await votingFactory.addVoting([cand1.address, cand2.address]);
+    let votingId = 0;
+    await votingFactory.connect(p1).vote(votingId, cand1.address);
+
+    let err;
+    try {
+      await votingFactory.connect(p1).vote(votingId, cand2.address);
+    } catch (error) {
+      err = error;
+    }
+    expect(err).is.not.undefined;
   });
 });
