@@ -1,5 +1,7 @@
 # votes-dapp
-my test project to get the basic ideas about developing smart contracts and the related stuff 
+
+My test project to get the basic ideas about developing smart contracts and the related stuff.
+
 This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, a sample script that deploys that contract, and an example of a task implementation, which simply lists the available accounts.
 
 Try running some of the following tasks:
