@@ -29,6 +29,16 @@ describe("VotingFactory", function () {
     expect(err).is.not.undefined;
   });
 
+  it("should be possible to add a new voting only by owner", async function () {
+    let err;
+    try {
+      await votingFactory.connect(p1).addVoting([cand1.address]);
+    } catch (error) {
+      err = error;
+    }
+    expect(err).is.not.undefined;
+  });
+
   it("should add a new voting", async function () {
     await votingFactory.addVoting([cand1.address, cand2.address]);
     let v = await votingFactory.getVotings();

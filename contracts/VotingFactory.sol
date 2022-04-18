@@ -58,9 +58,9 @@ contract VotingFactory is Ownable {
     }
 
     //@dev sends accumulated fees to the owner
-    function withdraw() external onlyOwner {
-        //TODO 1: returns accumulated fees
-    }
+    // function withdraw() external onlyOwner {
+    //     //TODO 1: returns accumulated fees
+    // }
 
     //@dev checks if the voting isn't ended yet, 
     //if the voter hasn't voted yet and then saves voter's decision 
