@@ -1,13 +1,13 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.13;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "./MyOwnable.sol";
 
 //@title Voting system
 //@author Mad Aekauq
 //@notice Owner can start _votings with the list of candidates.
 //Then everone can vote, and after a voting finishes the winner gets the reward.
-contract VotingFactory is Ownable {
+contract VotingFactory is MyOwnable {
 
     enum VotingState {
         InProcess,
@@ -16,7 +16,8 @@ contract VotingFactory is Ownable {
     }
 
     struct Voting {
-        uint32 endDate;
+        uint startDate;
+        uint endDate;
         VotingState state;
         address winner;
         address[] candidates;
@@ -36,12 +37,17 @@ contract VotingFactory is Ownable {
 
     Voting[] internal _votings;
     
-    mapping(uint => uint) _balance;//votingId => balance
-    mapping(uint => Vote[]) internal _givenVotes;//votingId => givenVotes
+    mapping(uint => uint) _balance;//vId => balance
+    mapping(uint => Vote[]) internal _givenVotes;//vId => givenVotes
     mapping(uint => uint) internal _voteCounters;//Vote.key => counter
 
+    modifier votingExists(uint id) {
+        require(id < _votings.length, "Voting doesn't exist");
+        _;
+    }
+
     //@dev useful for testing
-    function setVotingDuration(uint newDuration) external onlyOwner {
+    function setDuration(uint newDuration) external onlyOwner {
         _votingDuration = newDuration;
     }
 
@@ -49,6 +55,7 @@ contract VotingFactory is Ownable {
     function getVotingDetails(uint id) 
         external 
         view 
+        votingExists(id)
         returns (Voting memory, Vote[] memory) 
     {
         return (_votings[id], _givenVotes[id]);
@@ -65,94 +72,94 @@ contract VotingFactory is Ownable {
         require(candidates.length > 1, "at least 2 candidates expected");
         
         Voting memory newOne;
-        newOne.endDate = uint32(block.timestamp + _votingDuration);
+        newOne.startDate = block.timestamp;
+        newOne.endDate = newOne.startDate + _votingDuration;
         newOne.candidates = candidates;
         newOne.state = VotingState.InProcess;
         _votings.push(newOne);
     }
 
     //@dev sends accumulated fees to the owner
-    function withdraw(uint votingId) external onlyOwner {
+    function withdraw(uint vId) external onlyOwner votingExists(vId) {
         require(
-            _votings[votingId].state == VotingState.Finished, 
+            _votings[vId].state == VotingState.Finished, 
             "Voting isn't finished yet"
         );
-        _transfer(_balance[votingId], owner(), votingId);
+        _transfer(_balance[vId], _owner, vId);
     }
 
     //@dev checks if the voting isn't ended yet, 
     //if the voter hasn't voted yet and then saves voter's decision 
-    function vote(uint votingId, address candidate) external payable {
+    function vote(uint vId, address candidate) 
+        external 
+        payable 
+        votingExists(vId) 
+    {
         require(msg.value == _voteFee, "Wrong value");
+        Voting memory voting = _votings[vId];
         require(
-            _votings[votingId].endDate > block.timestamp,
+            voting.endDate > block.timestamp,
             "Voting period ended"
         );
 
-        uint key = uint(keccak256(abi.encodePacked(votingId, msg.sender)));
+        uint key = uint(keccak256(abi.encodePacked(vId, msg.sender)));
         require(
             _voteCounters[key] < _votesLimitPerVoter,
             "Votes limit is exceeded"
         );
+        //checks if the candidate exists, otherwise reverts
+        _getIndexOfCandidate(candidate, voting.candidates);
         
         _voteCounters[key]++;
-        _givenVotes[votingId].push(Vote(key, msg.sender, candidate));
-        _balance[votingId] += msg.value;
+        _givenVotes[vId].push(Vote(key, msg.sender, candidate));
+        _balance[vId] += msg.value;
     }
 
     //@dev checks if the voting exists and the end date has come already,
     //finds and saves the winner and sends the reward
-    function finish(uint votingId) external {
-        Voting storage voting = _votings[votingId];
+    function finish(uint vId) external votingExists(vId) {
+        Voting storage voting = _votings[vId];
         require(
             voting.state == VotingState.InProcess, 
             "The voting finished already"
         );
         require(
-            voting.endDate > 0 && 
             voting.endDate < block.timestamp,
             "The voting can't be finished yet"
         );
 
         voting.state = VotingState.CalculatingResults;
 
-        (uint firstWinner, bool twoWinnersSituation) = _findWinner(votingId);
+        (uint firstWinner, bool twoWinnersSituation) = _findWinner(vId);
         if (twoWinnersSituation) {
-            for (uint i = 0; i < _givenVotes[votingId].length; i++) {
+            for (uint i = 0; i < _givenVotes[vId].length; i++) {
                 _transfer(
                     _applyComission(_voteFee), 
-                    _givenVotes[votingId][i].owner, 
-                    votingId
+                    _givenVotes[vId][i].owner, 
+                    vId
                 );
             }
         } else {
             voting.winner = voting.candidates[firstWinner];
-            _transfer(
-                _applyComission(_balance[votingId]), 
-                voting.winner, 
-                votingId
-            );
+            _transfer(_applyComission(_balance[vId]), voting.winner, vId);
         }
         voting.state = VotingState.Finished;
     }
 
     //@dev transfers the amount from the voting balance to the specified address
-    function _transfer(uint amount, address to, uint votingId) internal {
-        _balance[votingId] -= amount;
-        payable(to).transfer(amount);        
+    function _transfer(uint amount, address to, uint vId) internal {
+        _balance[vId] -= amount;
+        payable(to).transfer(amount);
     }
 
     //@dev calculates the votes using internal structures and
     //checks if there are two or more winners (the same number of votes)
     //@return index of the first winner in the Voting's list of candidates
-    function _findWinner(uint votingId) internal view returns (uint, bool) {
-        uint[] memory votesFor;
-        for (uint i = 0; i < _votings[votingId].candidates.length; i++) {
-            votesFor[i] = 0;
-        }
-        for (uint i = 0; i < _givenVotes[votingId].length; i++) {
-            address c = _givenVotes[votingId][i].candidate;
-            uint index = _getIndexOf(c, _votings[votingId].candidates);
+    function _findWinner(uint vId) internal view returns (uint, bool) {
+        uint[] memory votesFor = new uint[](_votings[vId].candidates.length);
+        for (uint i = 0; i < _givenVotes[vId].length; i++) {
+            address c = _givenVotes[vId][i].candidate;
+            uint index = _getIndexOfCandidate(c, _votings[vId].candidates);
             votesFor[index]++;
         }
 
@@ -175,7 +182,7 @@ contract VotingFactory is Ownable {
         return (firstMaxIndex, twoWinnersSituation);
     }
 
-    function _getIndexOf(address a, address[] memory all) 
+    function _getIndexOfCandidate(address a, address[] memory all) 
         internal 
         pure 
         returns (uint)
@@ -186,7 +193,7 @@ contract VotingFactory is Ownable {
             }
         }
 
-        revert("no such address in the collection");
+        revert("no such candidate in the collection");
     }
 
     function _applyComission(uint input) internal view returns (uint) {
