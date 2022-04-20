@@ -72,6 +72,15 @@ task("vote", "Adds a vote from the voter for the candidate")
     console.log("the vote is registered");
   });
 
+task("finishVoting", "finishes the voting and rewards the winner")
+  .addParam("id", "voting's id")
+  .setAction(async (args, hre) => {
+    const [acc1] = await hre.ethers.getSigners();
+    await hre.run("initPlatform", { caller: acc1.address });
+
+    await plt.finish(args.id);
+  });
+
 subtask("initPlatform", "Initializes all required stuff")
   .addParam("caller", "address to do a call from")  
   .setAction(async (args, hre) => {
