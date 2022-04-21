@@ -1,6 +1,8 @@
 const { task, subtask, types } = require("hardhat/config");
 
 require("@nomiclabs/hardhat-waffle");
+require("@nomiclabs/hardhat-solhint");
+require("@nomiclabs/hardhat-etherscan");
 require("solidity-coverage");
 require("dotenv").config();
 
@@ -65,26 +67,26 @@ task("getDetails", "Shows details of the voting")
     });
   });
 
-task("vote", "Adds a vote from the voter for the candidate")
-  .addParam("vpa", "address of a voting platform")
-  .addParam("voting", "id of the voting")
-  .addParam("candidate", "address of the candidate")
-  .setAction(async (args, hre) => {
-    const [acc1] = await hre.ethers.getSigners();
-    const price = await hre.ethers.utils.parseUnits("0.01", "ether");
-    const plt = new hre.ethers.Contract(
-      args.vpa,
-      platformArtifact.abi,
-      acc1
-    );
-    await plt.vote(
-      args.id,
-      args.candidate,
-      { value: price }
-    );
-
-    console.log("the vote is registered");
-  });
+// task("vote", "Adds a vote from the voter for the candidate")
+//   .addParam("vpa", "address of a voting platform")
+//   .addParam("voting", "id of the voting")
+//   .addParam("candidate", "address of the candidate")
+//   .setAction(async (args, hre) => {
+//     const [acc1] = await hre.ethers.getSigners();
+//     //const price = await hre.ethers.utils.parseUnits("0.01", "ether");
+//     const value = 10000000000000000n;
+//     const plt = new hre.ethers.Contract(
+//       args.vpa,
+//       platformArtifact.abi,
+//       acc1
+//     );
+//     const x = await plt.vote(
+//       args.id,
+//       args.candidate,
+//       { value: value }
+//     );
+//     console.log("the vote is registered");
+//   });
 
 task("finishVoting", "finishes the voting and rewards the winner")
   .addParam("vpa", "address of a voting platform")
@@ -132,14 +134,19 @@ function formatVoting(voting) {
  * @type import('hardhat/config').HardhatUserConfig
  */
 module.exports = {
-    solidity: "0.8.13",
-    networks: {
-        rinkeby: {
-            url: `https://eth-rinkeby.alchemyapi.io/v2/${process.env.ALC_KEY}`,
-            accounts: [process.env.ACC_1, process.env.ACC_2]
-        },
-        hardhat: {
-          chainId: 1337
-        }
+  solidity: "0.8.13",
+  networks: {
+    rinkeby: {
+      url: `https://eth-rinkeby.alchemyapi.io/v2/${process.env.ALC_KEY}`,
+      accounts: [process.env.ACC_1, process.env.ACC_2]
+    },
+    hardhat: {
+      chainId: 1337
     }
+  },
+  etherscan: {
+    // Your API key for Etherscan
+    // Obtain one at https://etherscan.io/
+    apiKey: process.env.ETHER_SCAN_KEY
+  }
 };
