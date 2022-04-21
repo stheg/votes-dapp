@@ -74,6 +74,7 @@ contract VotingPlatform is MyOwnable {
     /// @param candidates a list of candidates' addresses
     function addVoting(address[] memory candidates) external onlyOwner {
         require(candidates.length > 1, "at least 2 candidates expected");
+        require(elementsUnique(candidates), "candidates should be unique");
         
         Voting memory newOne;
         newOne.startDate = block.timestamp;
@@ -205,6 +206,21 @@ contract VotingPlatform is MyOwnable {
             }
         }
         return false;
+    }
+
+    /// @dev checks if all elements of `list` are unique
+    function elementsUnique(address[] memory list) 
+        internal 
+        pure 
+        returns (bool) 
+    {
+        for (uint256 i = 0; i < list.length; i++) {
+            for (uint256 j = i + 1; j < list.length; j++) {
+                if (list[i] == list[j])
+                    return false;
+            }
+        }
+        return true;
     }
 
     /// @dev reverts if the element isn't found in the array 

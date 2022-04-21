@@ -49,10 +49,15 @@ describe("VotingPlatform", function() {
             )
         );
 
-        it("should require candidates for a new voting", async function () {
+        it("should require 2 candidates", async function () {
             await expect(voting(owner, [])).to.be.revertedWith(
                 "at least 2 candidates expected"
             );
+        });
+
+        it("should require unique candidates", async function () {
+            await expect(voting(owner, [cand1.address, cand1.address]))
+                .to.be.revertedWith("candidates should be unique");
         });
 
         it("should be possible to have more than 1 voting", async function () {
