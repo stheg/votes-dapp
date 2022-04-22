@@ -28,15 +28,19 @@ task("get-details", "Shows details of the voting")
     .setAction(async (args) => {
         let caller = await getCaller(args.from);
         const plt = await initPlatform(args.vpa, caller);
-        const voting = await plt.getVotingDetails(args.voting);
-        
-        formatVoting(voting[0]);
-        console.log("registered %s votes: ", voting[1].length);
-        voting[1].forEach(vote => {
-            console.log("   voter: " + vote.owner);
-            console.log("   candidate: " + vote.candidate);
-            console.log("----------------------------");
-        });
+        try {
+            const voting = await plt.getVotingDetails(args.voting);
+            
+            formatVoting(voting[0]);
+            console.log("registered %s votes: ", voting[1].length);
+            voting[1].forEach(vote => {
+                console.log("   voter: " + vote.owner);
+                console.log("   candidate: " + vote.candidate);
+                console.log("----------------------------");
+            });
+        } catch (err) {
+            console.log(err.error ?? err);
+        }
     });
 
 task("vote", "Adds a vote from the voter for the candidate")
@@ -50,15 +54,15 @@ task("vote", "Adds a vote from the voter for the candidate")
         const plt = await initPlatform(args.vpa, caller);
         
         try {
-            await plt.vote(
+            const t = await plt.vote(
                 args.voting, 
                 candidate, 
                 { value: hre.ethers.utils.parseEther("0.01") }
             );
+            console.log("the vote is registered");
         } catch (err) {
-            console.log(err);
+            console.log(err.error ?? err);
         }
-        console.log("the vote is registered");
     });
 
 task("finish-voting", "finishes the voting and rewards the winner")
@@ -69,7 +73,11 @@ task("finish-voting", "finishes the voting and rewards the winner")
         let caller = await getCaller(args.from);
         const plt = await initPlatform(args.vpa, caller);
         
-        await plt.finish(args.voting);
+        try {
+            const t = await plt.finish(args.voting);
+        } catch (err) {
+            console.log(err.error ?? err);
+        }
     });
 
 task("withdraw", "transfers gathered comission to the owner")
@@ -80,7 +88,11 @@ task("withdraw", "transfers gathered comission to the owner")
         let caller = await getCaller(args.from);
         const plt = await initPlatform(args.vpa, caller);
         
-        await plt.withdraw(args.voting);
+        try {
+            const t = await plt.withdraw(args.voting);
+        } catch (err) {
+            console.log(err.error ?? err);
+        }
     });
 
 async function initPlatform(address, acc) {

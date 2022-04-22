@@ -96,7 +96,7 @@ contract VotingPlatform is MyOwnable {
             "Votes limit"
         );
         //checks if the candidate exists, otherwise reverts
-        indexOf(candidate, _votings[vId].candidates);
+        _indexOf(candidate, _votings[vId].candidates);
         
         _givenVotes[vId].push(Vote(msg.sender, candidate));
         _balance[vId] += msg.value;
@@ -116,7 +116,7 @@ contract VotingPlatform is MyOwnable {
             _givenVotes[vId]
         );
         if (controversialSituation) {
-            handleControversialSituation(vId);
+            _handleControversialSituation(vId);
         } else {
             _votings[vId].winner = winner;
             _transfer(
@@ -149,7 +149,7 @@ contract VotingPlatform is MyOwnable {
         
         uint[] memory votesFor = new uint[](candidates.length);
         for (uint i = 0; i < votes.length; i++) {
-            uint cand = indexOf(votes[i].candidate, candidates);
+            uint cand = _indexOf(votes[i].candidate, candidates);
             votesFor[cand]++;
 
             if (votesFor[cand] > maxVal) {
@@ -170,7 +170,7 @@ contract VotingPlatform is MyOwnable {
     }
 
     /// @dev defines what we should do in case if we don't have the winner 
-    function handleControversialSituation(uint vId) internal virtual {
+    function _handleControversialSituation(uint vId) internal virtual {
         //revert("controversial situation");
         for (uint i = 0; i < _givenVotes[vId].length; i++) {
             _transfer(
@@ -197,7 +197,7 @@ contract VotingPlatform is MyOwnable {
     }
 
     /// @dev reverts if the element isn't found in the array 
-    function indexOf(address a, address[] memory all) 
+    function _indexOf(address a, address[] memory all) 
         internal 
         pure 
         returns (uint)
