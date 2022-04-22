@@ -6,28 +6,19 @@ import "./MyOwnable.sol";
 /// @title Voting Platform
 /// @author Mad Aekauq
 /// @notice The owner can start votings with candidates.
-/// Anyone can vote, what accumulates rewards.
-/// After end dates come votings can be finished, and 
-/// winners will get their rewards after a comission is taken.
+/// Anyone can vote. After end dates come votings can be finished,
+/// Winners will get their rewards after comissions are taken.
 /// Then the owner can withdraw comissions.
 contract VotingPlatform is MyOwnable {
 
-    enum VotingState {
-        InProcess,
-        CalculatingResults,
-        Finished
-    }
-
     struct Voting {
-        uint startDate;
         uint endDate;
-        VotingState state;
-        address winner;
+        uint state;
+        uint winner;
         address[] candidates;
     }
     
     struct Vote {
-        //uint key;
         address owner;
         address candidate;
     }
@@ -54,13 +45,13 @@ contract VotingPlatform is MyOwnable {
 
     /// @notice returns details about the requested voting
     /// @param id id of the voting
-    /// @return descr description of the voting
+    /// @return voting description of the voting
     /// @return votes all given votes
     function getVotingDetails(uint id) 
         external 
         view 
         votingExists(id)
-        returns (Voting memory descr, Vote[] memory votes) 
+        returns (Voting memory voting, Vote[] memory votes) 
     {
         return (_votings[id], _givenVotes[id]);
     }
@@ -73,24 +64,19 @@ contract VotingPlatform is MyOwnable {
     /// @notice starts a new voting with the specified candidates
     /// @param candidates a list of candidates' addresses
     function addVoting(address[] memory candidates) external onlyOwner {
-        require(candidates.length > 1, "at least 2 candidates expected");
-        require(elementsUnique(candidates), "candidates should be unique");
+        require(candidates.length > 0, "needs candidates");
         
         Voting memory newOne;
-        newOne.startDate = block.timestamp;
-        newOne.endDate = newOne.startDate + _votingDuration;
+        newOne.endDate = block.timestamp + _votingDuration;
         newOne.candidates = candidates;
-        newOne.state = VotingState.InProcess;
+        newOne.state = 0;//in process
         _votings.push(newOne);
     }
 
     /// @notice transfers the taken comission to the owner of the platform
     /// @param vId id of the voting
     function withdraw(uint vId) external onlyOwner votingExists(vId) {
-        require(
-            _votings[vId].state == VotingState.Finished, 
-            "Voting isn't finished yet"
-        );
+        require(_votings[vId].state == 2, "Voting isn't finished");
         _transfer(_balance[vId], _owner, vId);
     }
 
@@ -102,16 +88,15 @@ contract VotingPlatform is MyOwnable {
         payable 
         votingExists(vId) 
     {
-        require(msg.value == _voteFee, "Wrong value");
-        Voting memory voting = _votings[vId];
-        require(voting.endDate > block.timestamp, "Voting period ended");
+        require(msg.value == _voteFee, "Wrong price");
+        require(_votings[vId].endDate > block.timestamp, "Voting period ended");
 
         require(
             !_hasAlreadyVoted(msg.sender, _givenVotes[vId]),
-            "Votes limit is exceeded"
+            "Votes limit"
         );
         //checks if the candidate exists, otherwise reverts
-        indexOf(candidate, voting.candidates);
+        indexOf(candidate, _votings[vId].candidates);
         
         _givenVotes[vId].push(Vote(msg.sender, candidate));
         _balance[vId] += msg.value;
@@ -120,31 +105,27 @@ contract VotingPlatform is MyOwnable {
     /// @notice finishes the voting and sends the reward
     /// @param vId id of the voting
     function finish(uint vId) external votingExists(vId) {
-        Voting storage voting = _votings[vId];
-        require(
-            voting.state == VotingState.InProcess, 
-            "The voting finished already"
-        );
-        require(
-            voting.endDate < block.timestamp,
-            "The voting can't be finished yet"
-        );
-        //it shouldn't be possible to finish again
-        //and it shouldn't be possible to withdraw until it is finihed.
-        //so we use this special state here
-        voting.state = VotingState.CalculatingResults;
+        Voting memory v = _votings[vId];
+        require(v.state == 0, "finished already");
+        require(v.endDate < block.timestamp, "can't be finished yet");
+        
+        _votings[vId].state = 1;//calculating results
 
-        (uint winner, bool controversialSituation) = _findWinner(vId);
+        (uint winner, bool controversialSituation) = _findWinner(
+            v.candidates, 
+            _givenVotes[vId]
+        );
         if (controversialSituation) {
-            Vote[] memory votes = _givenVotes[vId];
-            for (uint i = 0; i < votes.length; i++) {
-                _transfer(_applyComission(_voteFee), votes[i].owner, vId);
-            }
+            handleControversialSituation(vId);
         } else {
-            voting.winner = voting.candidates[winner];
-            _transfer(_applyComission(_balance[vId]), voting.winner, vId);
+            _votings[vId].winner = winner;
+            _transfer(
+                _applyComission(_balance[vId]), 
+                _votings[vId].candidates[winner], 
+                vId
+            );
         }
-        voting.state = VotingState.Finished;
+        _votings[vId].state = 2;//finished
     }
 
     /// @dev transfers the amount from the voting balance. DRY
@@ -155,27 +136,22 @@ contract VotingPlatform is MyOwnable {
 
     /// @dev calculates the votes using internal structures and
     /// checks if there are two or more winners (the same number of votes)
-    /// @param vId id of the voting
     /// @return winnerIndex the first winner in the Voting's list of candidates
     /// @return controversialSituation true, if more than 1 winner
-    function _findWinner(uint vId) 
+    function _findWinner(address[] memory candidates, Vote[] memory votes) 
         internal 
         virtual 
         view 
         returns (uint winnerIndex, bool controversialSituation) 
     {
-        Voting memory voting = _votings[vId];
-        Vote[] memory givenVotes = _givenVotes[vId];
-        
         uint maxVal = 0;
         winnerIndex = 0;
         
-        uint[] memory votesFor = new uint[](voting.candidates.length);
-        for (uint i = 0; i < givenVotes.length; i++) {
-            uint cand = indexOf(givenVotes[i].candidate, voting.candidates);
+        uint[] memory votesFor = new uint[](candidates.length);
+        for (uint i = 0; i < votes.length; i++) {
+            uint cand = indexOf(votes[i].candidate, candidates);
             votesFor[cand]++;
 
-            //get the max right here to avoid second For-loop
             if (votesFor[cand] > maxVal) {
                 maxVal = votesFor[cand];
                 winnerIndex = cand;
@@ -193,34 +169,31 @@ contract VotingPlatform is MyOwnable {
         return (winnerIndex, controversialSituation);
     }
 
-    /// @dev checks if `votes` contains an element with owner == `voter`   
+    /// @dev defines what we should do in case if we don't have the winner 
+    function handleControversialSituation(uint vId) internal virtual {
+        //revert("controversial situation");
+        for (uint i = 0; i < _givenVotes[vId].length; i++) {
+            _transfer(
+                _applyComission(_voteFee), 
+                _givenVotes[vId][i].owner, 
+                vId
+            );
+        }
+    }
+
+    /// @dev checks if voter has already voted   
     function _hasAlreadyVoted(address voter, Vote[] memory votes) 
         internal
         virtual
         pure
         returns (bool)
     {
-        for (uint256 i = 0; i < votes.length; i++) {
+        for (uint i = 0; i < votes.length; i++) {
             if (votes[i].owner == voter) {
                 return true; 
             }
         }
         return false;
-    }
-
-    /// @dev checks if all elements of `list` are unique
-    function elementsUnique(address[] memory list) 
-        internal 
-        pure 
-        returns (bool) 
-    {
-        for (uint256 i = 0; i < list.length; i++) {
-            for (uint256 j = i + 1; j < list.length; j++) {
-                if (list[i] == list[j])
-                    return false;
-            }
-        }
-        return true;
     }
 
     /// @dev reverts if the element isn't found in the array 
@@ -234,7 +207,7 @@ contract VotingPlatform is MyOwnable {
                 return i;
         }
 
-        revert("no such candidate in the collection");
+        revert("no such candidate");
     }
 
     /// @dev DRY

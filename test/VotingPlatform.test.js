@@ -51,13 +51,8 @@ describe("VotingPlatform", function() {
 
         it("should require 2 candidates", async function () {
             await expect(voting(owner, [])).to.be.revertedWith(
-                "at least 2 candidates expected"
+                "needs candidates"
             );
-        });
-
-        it("should require unique candidates", async function () {
-            await expect(voting(owner, [cand1.address, cand1.address]))
-                .to.be.revertedWith("candidates should be unique");
         });
 
         it("should be possible to have more than 1 voting", async function () {
@@ -91,7 +86,7 @@ describe("VotingPlatform", function() {
             await vote(p1, cand1);
 
             await expect(vote(p1, cand2)).to.be.revertedWith(
-                "Votes limit is exceeded"
+                "Votes limit"
             );
         });
 
@@ -99,20 +94,20 @@ describe("VotingPlatform", function() {
             await voting(owner, [cand1.address, cand2.address]);
 
             await expect(vote(p1, owner)).to.be.revertedWith(
-                "no such candidate in the collection"
+                "no such candidate"
             );
         });
 
         it("shouldn't vote with a wrong price", async function () {
             await voting(owner, [cand1.address, cand2.address]);
 
-            const wrongPrice = ethers.utils.parseEther("0.02")
+            const wrongPrice = ethers.utils.parseEther("0.002")
             await expect(votingPlt.connect(p1).vote(
                 0, 
                 cand1.address, 
                 { value:wrongPrice }
             ))
-            .to.be.revertedWith("Wrong value");
+            .to.be.revertedWith("Wrong price");
         });
     })
 
@@ -121,7 +116,7 @@ describe("VotingPlatform", function() {
             await voting(owner, [cand1.address, cand2.address]);
 
             await expect(finish(owner)).to.be.revertedWith(
-                "The voting can't be finished yet"
+                "can't be finished yet"
             );
         });
 
@@ -152,7 +147,7 @@ describe("VotingPlatform", function() {
                 .to.changeEtherBalance(cand1, voteFee * 90/100);
             
             let v = await votingPlt.getVotingDetails(0);
-            expect(v[0].winner).eq(cand1.address);
+            expect(v[0].winner).eq(0);
             expect(v[0].state).eq(2);//finished
         });
 
@@ -177,7 +172,7 @@ describe("VotingPlatform", function() {
             )
 
             let v = await votingPlt.getVotingDetails(0);
-            expect(v[0].winner).eq(cand2.address);
+            expect(v[0].winner).eq(1);
             expect(v[0].state).eq(2);//finished
         });
 
@@ -191,9 +186,7 @@ describe("VotingPlatform", function() {
             await delaySec(duration);
             await finish(p1)
 
-            await expect(finish(owner)).to.be.revertedWith(
-                "The voting finished already"
-            )
+            await expect(finish(owner)).to.be.revertedWith("finished already");
         });
 
         it("should finish without the winner", async function () {
@@ -223,7 +216,7 @@ describe("VotingPlatform", function() {
             await voting(owner, [cand1.address, cand2.address]);
 
             await expect(votingPlt.withdraw(0))
-                .to.be.revertedWith("Voting isn't finished yet")
+                .to.be.revertedWith("Voting isn't finished")
         });
         
         it("should change owner's balance", async function () {

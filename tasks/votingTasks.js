@@ -4,9 +4,10 @@ task("add-voting", "Adds a new voting with candidates")
     .addOptionalVariadicPositionalParam("candidates", "list of candidates' addresses")
     .setAction(async function (args) {
         let caller = await getCaller(args.from);
+        let candidates = await getCandidates(args.candidates);
         const plt = await initPlatform(args.vpa, caller);
 
-        await plt.addVoting(args.candidates);
+        await plt.addVoting(candidates);
     });
 
 task("get-votings", "Shows all votings")
@@ -41,16 +42,17 @@ task("get-details", "Shows details of the voting")
 task("vote", "Adds a vote from the voter for the candidate")
     .addParam("vpa", "address of a voting platform")
     .addParam("voting", "id of the voting")
-    .addParam("candidate", "address of the candidate")
+    .addOptionalParam("candidate", "address of the candidate")
     .addOptionalParam("from", "address of the caller")
     .setAction(async (args) => {
         let caller = await getCaller(args.from);
+        let candidate = args.candidate ?? caller.address;
         const plt = await initPlatform(args.vpa, caller);
         
         try {
             await plt.vote(
                 args.voting, 
-                args.candidate, 
+                candidate, 
                 { value: hre.ethers.utils.parseEther("0.01") }
             );
         } catch (err) {
@@ -97,15 +99,25 @@ async function getCaller(addr) {
     return acc;
 }
 
+async function getCandidates(arg) {
+    let cands;
+    if (arg != undefined && arg != []) {
+        cands = arg;
+    } else {
+        [acc1, acc2] = await hre.ethers.getSigners();
+        cands = [acc1.address, acc2.address]
+    }
+    return cands;
+}
+
 function formatVoting(voting) {
-    const startDate = new Date(voting.startDate * 1000).toLocaleDateString();
     const endDate = new Date(voting.endDate * 1000).toLocaleDateString();
     const status = (voting.state > 0) ? "Finished" : "In Process";
+    const winner = (voting.state > 0) ? voting.candidates[voting.winner] : "-";
 
     console.log("voting description:");
-    console.log("   start date: " + startDate)
     console.log("   end date: " + endDate)
     console.log("   candidates: " + voting.candidates);
     console.log("   status: %s", status);
-    console.log("   winner: " + voting.winner);
+    console.log("   winner: " + winner);
 }

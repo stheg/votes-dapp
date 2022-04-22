@@ -19,11 +19,11 @@ async function main() {
     "VotingPlatform", 
     owner
   );
-  const votingPlt = await VotingPlatform.deploy();
+  const c = await VotingPlatform.deploy();
 
-  await votingPlt.deployed();
+  await c.deployed();
 
-  console.log("Voting Platforms deployed to:", votingPlt.address);
+  console.log("Contract deployed to:", c.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere
