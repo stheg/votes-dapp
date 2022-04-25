@@ -1,4 +1,16 @@
-task("add-voting", "Adds a new voting with candidates")
+task("set-duration", "Sets how long all new votings will last")
+    .addParam("vpa", "address of a voting platform")
+    .addParam("seconds", "duration in seconds")
+    .addOptionalParam("from", "address of the caller")
+    .setAction(async (args) => {
+        let caller = await getCaller(args.from);
+        const plt = await initPlatform(args.vpa, caller);
+
+        const votings = await plt.setDuration(args.seconds);
+        votings.forEach(v => formatVoting(v));
+    }); 
+    
+    task("add-voting", "Adds a new voting with candidates")
     .addParam("vpa", "address of a voting platform")
     .addOptionalParam("from", "address of the caller")
     .addOptionalVariadicPositionalParam("candidates", "list of candidates' addresses")
