@@ -11,10 +11,18 @@ import "./MyOwnable.sol";
 /// Then the owner can withdraw comissions.
 contract VotingPlatform is MyOwnable {
 
+    enum VotingState {
+        InProcess,
+        PendingResults,
+        ReadyToFinish,
+        Finished,
+        Failed
+    }
+
     struct Voting {
         uint endDate;
-        uint state;
         uint winner;
+        VotingState state;
         address[] candidates;
     }
     
@@ -22,6 +30,8 @@ contract VotingPlatform is MyOwnable {
         address owner;
         address candidate;
     }
+
+    event PendingForResults(uint vId);
 
     uint _votingDuration = 3 days;
     uint _voteFee = 0.01 ether;
@@ -39,7 +49,7 @@ contract VotingPlatform is MyOwnable {
 
     /// @notice sets duration for new votings
     /// @param newDuration a new duration (in seconds) for all new votings
-    function setDuration(uint newDuration) external onlyOwner {
+    function SetDuration(uint newDuration) external onlyOwner {
         _votingDuration = newDuration;
     }
 
@@ -47,8 +57,8 @@ contract VotingPlatform is MyOwnable {
     /// @param id id of the voting
     /// @return voting description of the voting
     /// @return votes all given votes
-    function getVotingDetails(uint id) 
-        external 
+    function GetVotingDetails(uint id) 
+        public 
         view 
         votingExists(id)
         returns (Voting memory voting, Vote[] memory votes) 
@@ -57,132 +67,119 @@ contract VotingPlatform is MyOwnable {
     }
 
     /// @notice returns all votings in order they were created
-    function getVotings() external view returns (Voting[] memory) {
+    function GetVotings() external view returns (Voting[] memory) {
         return _votings;
     }
 
     /// @notice starts a new voting with the specified candidates
     /// @param candidates a list of candidates' addresses
-    function addVoting(address[] memory candidates) external onlyOwner {
+    function AddVoting(address[] memory candidates) external onlyOwner {
         require(candidates.length > 0, "needs candidates");
         
         Voting memory newOne;
         newOne.endDate = block.timestamp + _votingDuration;
         newOne.candidates = candidates;
-        newOne.state = 0;//in process
+        newOne.state = VotingState.InProcess;
         _votings.push(newOne);
-    }
-
-    /// @notice transfers the taken comission to the owner of the platform
-    /// @param vId id of the voting
-    function withdraw(uint vId) external onlyOwner votingExists(vId) {
-        require(_votings[vId].state == 2, "Voting isn't finished");
-        _transfer(_balance[vId], _owner, vId);
     }
 
     /// @notice saves voter's decision and increases the balance of the voting
     /// @param vId id of the voting
     /// @param candidate address of the existing candidate
-    function vote(uint vId, address candidate) 
+    function AddVote(uint vId, address candidate) 
         external 
         payable 
         votingExists(vId) 
     {
         require(msg.value == _voteFee, "Wrong price");
         require(_votings[vId].endDate > block.timestamp, "Voting period ended");
-
         require(
-            !_hasAlreadyVoted(msg.sender, _givenVotes[vId]),
+            !hasAlreadyVoted(msg.sender, _givenVotes[vId]),
             "Votes limit"
         );
-        //checks if the candidate exists, otherwise reverts
-        _indexOf(candidate, _votings[vId].candidates);
-        
+        (,bool found) = indexOf(candidate, _votings[vId].candidates);
+        require(found, "no such candidate");
+
         _givenVotes[vId].push(Vote(msg.sender, candidate));
         _balance[vId] += msg.value;
     }
 
-    /// @notice finishes the voting and sends the reward
-    /// @param vId id of the voting
-    function finish(uint vId) external votingExists(vId) {
+    /// @notice Checks if voting can be finished 
+    /// and sets its state to CalculatingResults.
+    /// Returns details to do all calculations outside.
+    function CalculateResults(uint vId) 
+        external 
+        votingExists(vId)
+    {
         Voting memory v = _votings[vId];
-        require(v.state == 0, "finished already");
+        require(v.state == VotingState.InProcess, "calculation was already requested");
         require(v.endDate < block.timestamp, "can't be finished yet");
         
-        _votings[vId].state = 1;//calculating results
+        _votings[vId].state = VotingState.PendingResults;
 
-        (uint winner, bool controversialSituation) = _findWinner(
-            v.candidates, 
-            _givenVotes[vId]
+        emit PendingForResults(vId);
+    }
+
+    function UpdateVotingResult(uint vId, uint winnerId) 
+        external
+        onlyOwner
+        votingExists(vId)
+    {
+        require(
+            _votings[vId].state == VotingState.PendingResults, 
+            "voting doesn't expect updates"
         );
-        if (controversialSituation) {
-            _handleControversialSituation(vId);
-        } else {
-            _votings[vId].winner = winner;
-            _transfer(
-                _applyComission(_balance[vId]), 
-                _votings[vId].candidates[winner], 
-                vId
-            );
-        }
-        _votings[vId].state = 2;//finished
+        require(
+            winnerId < _votings[vId].candidates.length, 
+            "winner is out of boundaries"
+        );
+        
+        _votings[vId].winner = winnerId;
+        _votings[vId].state = VotingState.ReadyToFinish;
+
+        //TODO: implement event to make it possible to finish from outside
+        // it is split into 2 stages/functions to make it possible 
+        // to verify the results outside and only then finish & reward
+        // emit ReadyToFinish(vId);
+        Finish(vId);
+    }
+
+    /// @notice finishes the voting and sends the reward
+    /// @param vId id of the voting
+    function Finish(uint vId) public votingExists(vId) {
+        require(
+            _votings[vId].state == VotingState.ReadyToFinish, 
+            "voting isn't ready to finish"
+        );
+
+        _votings[vId].state = VotingState.Finished;
+        transfer(
+            applyComission(_balance[vId]), 
+            _votings[vId].candidates[_votings[vId].winner], 
+            vId
+        );
+    }
+
+    /// @notice transfers the taken comission to the owner of the platform
+    /// @param vId id of the voting
+    function Withdraw(uint vId) external onlyOwner votingExists(vId) {
+        require(
+            _votings[vId].state == VotingState.Finished, 
+            "Voting isn't finished"
+        );
+        transfer(_balance[vId], _owner, vId);
     }
 
     /// @dev transfers the amount from the voting balance. DRY
-    function _transfer(uint amount, address to, uint vId) internal {
+    function transfer(uint amount, address to, uint vId) internal {
+        if (amount == 0)
+            return;
         _balance[vId] -= amount;
         payable(to).transfer(amount);
     }
 
-    /// @dev calculates the votes using internal structures and
-    /// checks if there are two or more winners (the same number of votes)
-    /// @return winnerIndex the first winner in the Voting's list of candidates
-    /// @return controversialSituation true, if more than 1 winner
-    function _findWinner(address[] memory candidates, Vote[] memory votes) 
-        internal 
-        virtual 
-        view 
-        returns (uint winnerIndex, bool controversialSituation) 
-    {
-        uint maxVal = 0;
-        winnerIndex = 0;
-        
-        uint[] memory votesFor = new uint[](candidates.length);
-        for (uint i = 0; i < votes.length; i++) {
-            uint cand = _indexOf(votes[i].candidate, candidates);
-            votesFor[cand]++;
-
-            if (votesFor[cand] > maxVal) {
-                maxVal = votesFor[cand];
-                winnerIndex = cand;
-            }
-        }
-
-        controversialSituation = false;
-        for (uint i = 0; i < votesFor.length; i++) {
-            if (i != winnerIndex && votesFor[i] == maxVal) {
-                controversialSituation = true;
-                break;
-            }
-        }
-
-        return (winnerIndex, controversialSituation);
-    }
-
-    /// @dev defines what we should do in case if we don't have the winner 
-    function _handleControversialSituation(uint vId) internal virtual {
-        //revert("controversial situation");
-        for (uint i = 0; i < _givenVotes[vId].length; i++) {
-            _transfer(
-                _applyComission(_voteFee), 
-                _givenVotes[vId][i].owner, 
-                vId
-            );
-        }
-    }
-
     /// @dev checks if voter has already voted   
-    function _hasAlreadyVoted(address voter, Vote[] memory votes) 
+    function hasAlreadyVoted(address voter, Vote[] memory votes) 
         internal
         virtual
         pure
@@ -197,21 +194,20 @@ contract VotingPlatform is MyOwnable {
     }
 
     /// @dev reverts if the element isn't found in the array 
-    function _indexOf(address a, address[] memory all) 
+    function indexOf(address a, address[] memory all) 
         internal 
         pure 
-        returns (uint)
+        returns (uint, bool)
     {
         for (uint i = 0; i < all.length; i++) {
             if (all[i] == a)
-                return i;
+                return (i, true);//found
         }
-
-        revert("no such candidate");
+        return (0, false);//not found
     }
 
     /// @dev DRY
-    function _applyComission(uint input) internal view returns (uint) {
+    function applyComission(uint input) internal view returns (uint) {
         return input * (100 - _comission) / 100;
     }
 }
