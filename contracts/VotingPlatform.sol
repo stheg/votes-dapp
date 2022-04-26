@@ -31,7 +31,8 @@ contract VotingPlatform is MyOwnable {
         address candidate;
     }
 
-    event PendingForResults(uint vId);
+    event PendingForResults(uint indexed vId);
+    event ReadyToFinish(uint indexed vId);
 
     uint _votingDuration = 3 days;
     uint _voteFee = 0.01 ether;
@@ -137,11 +138,10 @@ contract VotingPlatform is MyOwnable {
         _votings[vId].winner = winnerId;
         _votings[vId].state = VotingState.ReadyToFinish;
 
-        //TODO: implement event to make it possible to finish from outside
         // it is split into 2 stages/functions to make it possible 
         // to verify the results outside and only then finish & reward
-        // emit ReadyToFinish(vId);
-        Finish(vId);
+        emit ReadyToFinish(vId);
+        // Finish(vId);
     }
 
     /// @notice finishes the voting and sends the reward
