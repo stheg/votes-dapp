@@ -199,8 +199,10 @@ describe("VotingPlatform", function() {
                 .withArgs(0);
             const vs = await votingPlt.GetVotings();
             expect(vs[0].state).eq(1);
-            const t = await updResults(owner, 0);
-            //const t = await finish(p2);
+            await expect(updResults(owner, 0))
+                .to.emit(votingPlt, "ReadyToFinish")
+                .withArgs(0);
+            const t = await finish(p2);
 
             await expect(() => t)
                 .to.changeEtherBalance(cand1, voteFee * 90/100);
@@ -226,9 +228,10 @@ describe("VotingPlatform", function() {
                 .withArgs(0);
             const vs = await votingPlt.GetVotings();
             expect(vs[0].state).eq(1);
-            const t = await updResults(owner, 1);
-            
-            //const t = await finish(p2)
+            await expect(updResults(owner, 1))
+                .to.emit(votingPlt, "ReadyToFinish")
+                .withArgs(0);
+            const t = await finish(p2);
             
             // ethers.utils.parseEther("0.04")
             let expBalanceAfterVotes = 40000000000000000n;
@@ -300,10 +303,12 @@ describe("VotingPlatform", function() {
                 .withArgs(0);
             const vs = await votingPlt.GetVotings();
             expect(vs[0].state).eq(1);
-            await updResults(owner, 0);
-            //await finish(p2)
+            await expect(updResults(owner, 0))
+                .to.emit(votingPlt, "ReadyToFinish")
+                .withArgs(0);
+            await finish(p2);
 
-            const t = await votingPlt.Withdraw(0)
+            const t = await votingPlt.Withdraw(0);
 
             await expect(() => t)
                 .to.changeEtherBalance(owner, 0);
@@ -322,8 +327,10 @@ describe("VotingPlatform", function() {
                 .withArgs(0);
             const vs = await votingPlt.GetVotings();
             expect(vs[0].state).eq(1);
-            await updResults(owner, 0);
-            //await finish(p2)
+            await expect(updResults(owner, 0))
+                .to.emit(votingPlt, "ReadyToFinish")
+                .withArgs(0);
+            await finish(p2);
             
             const t = await votingPlt.Withdraw(0)
 
