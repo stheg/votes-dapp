@@ -6,8 +6,7 @@ task("set-duration", "Sets how long all new votings will last")
         let caller = await getCaller(args.from);
         const plt = await initPlatform(args.vpa, caller);
 
-        const votings = await plt.setDuration(args.seconds);
-        votings.forEach(v => formatVoting(v));
+        await plt.setDuration(args.seconds);
     }); 
     
     task("add-voting", "Adds a new voting with candidates")
