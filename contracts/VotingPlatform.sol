@@ -48,14 +48,14 @@ contract VotingPlatform is MyOwnable {
     event PendingForResults(uint indexed vId);
     event ReadyToFinish(uint indexed vId);
 
-    uint _votingDuration = 3 days;
-    uint _voteFee = 0.01 ether;
-    uint _comission = 10;//%
+    uint private _votingDuration = 3 days;
+    uint private _voteFee = 0.01 ether;
+    uint private _comission = 10;//%
 
-    Voting[] _votings;
+    Voting[] private _votings;
     
-    mapping(uint => uint) _balance;//vId => balance
-    mapping(uint => Vote[]) _givenVotes;//vId => givenVotes
+    mapping(uint => uint) private _balance;//vId => balance
+    mapping(uint => Vote[]) private _givenVotes;//vId => givenVotes
 
     modifier votingExists(uint id) {
         if(id >= _votings.length)
@@ -74,7 +74,7 @@ contract VotingPlatform is MyOwnable {
     /// @return voting description of the voting
     /// @return votes all votes in order they were given
     function GetVotingDetails(uint id) 
-        public 
+        external 
         view 
         votingExists(id)
         returns (Voting memory voting, Vote[] memory votes) 

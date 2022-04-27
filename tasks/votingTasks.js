@@ -76,7 +76,7 @@ task("vote", "Adds a vote from the voter for the candidate")
         }
     });
 
-task("finish-voting", "finishes the voting and rewards the winner")
+task("finish-voting", "Finishes the voting and rewards the winner")
     .addParam("vpa", "address of a voting platform")
     .addParam("voting", "id of the voting")
     .addOptionalParam("from", "address of the caller")
@@ -99,7 +99,7 @@ task("finish-voting", "finishes the voting and rewards the winner")
         }
     });
 
-task("withdraw", "transfers gathered comission to the owner")
+task("withdraw", "Transfers gathered comission to the owner")
     .addParam("vpa", "address of a voting platform")
     .addParam("voting", "id of the voting")
     .addOptionalParam("from", "address of the caller")
@@ -183,7 +183,7 @@ async function RunCalcHandlerAsync(plt, owner) {
 
     const v = await plt.connect(owner).GetVotingDetails(votingId);
     const winner = calculateResults(v[0], v[1]);
-    console.log("the winner is a candidate #" + winner+1);
+    console.log("the winner is a candidate with index " + winner);
     await plt.connect(owner).UpdateVotingResult(votingId, winner);
 }
 

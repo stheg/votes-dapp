@@ -1,6 +1,7 @@
 # votes-dapp
 
-My test project to get the basic ideas about developing smart contracts and the related stuff.
+My test project to get the basic ideas about developing smart contracts 
+and the related stuff.
 
 This project demonstrates a basic Hardhat use case.
 
@@ -23,7 +24,7 @@ Try running some of the following tasks:
   add-voting    Adds a new voting with candidates
   get-details   Shows details of the voting
   get-votings   Shows all votings
-  finish-voting finishes the voting and rewards the winner
+  finish-voting Finishes the voting and rewards the winner
   vote          Adds a vote from the voter for the candidate
-  withdraw      transfers gathered comission to the owner
+  withdraw      Transfers gathered comission to the owner
 ```
