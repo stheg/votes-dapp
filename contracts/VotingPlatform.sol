@@ -5,12 +5,12 @@ import "./MyOwnable.sol";
 
 /// @title Voting Platform
 /// @author Mad Aekauq
-/// @notice The owner can start votings with candidates.
-/// Anyone can vote. After end dates come votings can be finished,
-/// Winners will get their rewards after comissions are taken.
-/// Then the owner can withdraw comissions.
+/// @notice The voting platform allows to the owner to create new votings
+/// and gives to users a possibility to vote for candidates, to request
+/// results (when voting period ended) and, after the owner updates the results,
+/// to finish votings rewarding the winners.
 contract VotingPlatform is MyOwnable {
-
+    
     enum VotingState {
         InProcess,
         PendingResults,
@@ -31,6 +31,20 @@ contract VotingPlatform is MyOwnable {
         address candidate;
     }
 
+    error NoSuchVoting();
+    error CandidatesRequired();
+    error VotingPeriodEnded();
+    error VotesLimitExceeded();
+    error NoSuchCandidate();
+    error VotingIsStillInProcess();
+    error IndexIsOutOfBoundaries(uint index);
+
+    string constant ERR_WRONG_FEE = "Wrong fee";
+    string constant ERR_CALC_REQUESTED = "Calculation was already requested";
+    string constant ERR_NO_UPD_EXPECTED = "No updates expected";
+    string constant ERR_NOT_READY_TO_FINISH = "Not ready to finish";
+    string constant ERR_NOT_FINISHED = "Not finished";
+
     event PendingForResults(uint indexed vId);
     event ReadyToFinish(uint indexed vId);
 
@@ -44,20 +58,21 @@ contract VotingPlatform is MyOwnable {
     mapping(uint => Vote[]) _givenVotes;//vId => givenVotes
 
     modifier votingExists(uint id) {
-        require(id < _votings.length, "Voting doesn't exist");
+        if(id >= _votings.length)
+            revert NoSuchVoting();
         _;
     }
 
-    /// @notice sets duration for new votings
+    /// @notice The owner can set a duration for new votings
     /// @param newDuration a new duration (in seconds) for all new votings
     function SetDuration(uint newDuration) external onlyOwner {
         _votingDuration = newDuration;
     }
 
-    /// @notice returns details about the requested voting
+    /// @notice Returns details about the requested voting
     /// @param id id of the voting
     /// @return voting description of the voting
-    /// @return votes all given votes
+    /// @return votes all votes in order they were given
     function GetVotingDetails(uint id) 
         public 
         view 
@@ -67,15 +82,16 @@ contract VotingPlatform is MyOwnable {
         return (_votings[id], _givenVotes[id]);
     }
 
-    /// @notice returns all votings in order they were created
+    /// @notice Returns all votings in order they were created
     function GetVotings() external view returns (Voting[] memory) {
         return _votings;
     }
 
-    /// @notice starts a new voting with the specified candidates
+    /// @notice The owner can start a new voting
     /// @param candidates a list of candidates' addresses
     function AddVoting(address[] memory candidates) external onlyOwner {
-        require(candidates.length > 0, "needs candidates");
+        if (candidates.length == 0)
+            revert CandidatesRequired();
         
         Voting memory newOne;
         newOne.endDate = block.timestamp + _votingDuration;
@@ -84,7 +100,7 @@ contract VotingPlatform is MyOwnable {
         _votings.push(newOne);
     }
 
-    /// @notice saves voter's decision and increases the balance of the voting
+    /// @notice Adds the vote and accumulates the reward
     /// @param vId id of the voting
     /// @param candidate address of the existing candidate
     function AddVote(uint vId, address candidate) 
@@ -92,35 +108,38 @@ contract VotingPlatform is MyOwnable {
         payable 
         votingExists(vId) 
     {
-        require(msg.value == _voteFee, "Wrong price");
-        require(_votings[vId].endDate > block.timestamp, "Voting period ended");
-        require(
-            !hasAlreadyVoted(msg.sender, _givenVotes[vId]),
-            "Votes limit"
-        );
+        require(msg.value == _voteFee, ERR_WRONG_FEE);
+        if (_votings[vId].endDate <= block.timestamp)
+            revert VotingPeriodEnded();
+        if (hasAlreadyVoted(msg.sender, _givenVotes[vId]))
+            revert VotesLimitExceeded();
         (,bool found) = indexOf(candidate, _votings[vId].candidates);
-        require(found, "no such candidate");
+        if (!found) 
+            revert NoSuchCandidate();
 
         _givenVotes[vId].push(Vote(msg.sender, candidate));
         _balance[vId] += msg.value;
     }
 
-    /// @notice Checks if voting can be finished 
-    /// and sets its state to CalculatingResults.
-    /// Returns details to do all calculations outside.
+    /// @notice Checks if the voting period ended, changes the state
+    /// and emits a PendingForResults event to notify the owner or someone else
     function CalculateResults(uint vId) 
         external 
         votingExists(vId)
     {
         Voting memory v = _votings[vId];
-        require(v.state == VotingState.InProcess, "calculation was already requested");
-        require(v.endDate < block.timestamp, "can't be finished yet");
+        require(v.state == VotingState.InProcess, ERR_CALC_REQUESTED);
+        if (v.endDate > block.timestamp)
+            revert VotingIsStillInProcess();
         
         _votings[vId].state = VotingState.PendingResults;
 
         emit PendingForResults(vId);
     }
 
+    /// @notice The owner can update results of the voting.
+    /// It changes the voting's state and emits a ReadyToFinish event 
+    /// which can be used to notify a user who requested CalculateResults
     function UpdateVotingResult(uint vId, uint winnerId) 
         external
         onlyOwner
@@ -128,28 +147,25 @@ contract VotingPlatform is MyOwnable {
     {
         require(
             _votings[vId].state == VotingState.PendingResults, 
-            "voting doesn't expect updates"
+            ERR_NO_UPD_EXPECTED
         );
-        require(
-            winnerId < _votings[vId].candidates.length, 
-            "winner is out of boundaries"
-        );
-        
+        if (winnerId >= _votings[vId].candidates.length) 
+            revert IndexIsOutOfBoundaries(winnerId);
+
         _votings[vId].winner = winnerId;
         _votings[vId].state = VotingState.ReadyToFinish;
 
         // it is split into 2 stages/functions to make it possible 
         // to verify the results outside and only then finish & reward
         emit ReadyToFinish(vId);
-        // Finish(vId);
     }
 
-    /// @notice finishes the voting and sends the reward
+    /// @notice Finishes the voting
     /// @param vId id of the voting
     function Finish(uint vId) public votingExists(vId) {
         require(
             _votings[vId].state == VotingState.ReadyToFinish, 
-            "voting isn't ready to finish"
+            ERR_NOT_READY_TO_FINISH
         );
 
         _votings[vId].state = VotingState.Finished;
@@ -160,25 +176,28 @@ contract VotingPlatform is MyOwnable {
         );
     }
 
-    /// @notice transfers the taken comission to the owner of the platform
+    /// @notice The owner can withdraw the comission taken during the voting
     /// @param vId id of the voting
     function Withdraw(uint vId) external onlyOwner votingExists(vId) {
         require(
             _votings[vId].state == VotingState.Finished, 
-            "Voting isn't finished"
+            ERR_NOT_FINISHED
         );
         transfer(_balance[vId], _owner, vId);
     }
 
-    /// @dev transfers the amount from the voting balance. DRY
+    /// @dev Transfers the amount from the voting balance. DRY
     function transfer(uint amount, address to, uint vId) internal {
         if (amount == 0)
             return;
+        // should we?
+        // if (to == address(0))
+        //     revert();
         _balance[vId] -= amount;
         payable(to).transfer(amount);
     }
 
-    /// @dev checks if voter has already voted   
+    /// @dev Checks if the voter has already voted   
     function hasAlreadyVoted(address voter, Vote[] memory votes) 
         internal
         virtual
@@ -193,7 +212,7 @@ contract VotingPlatform is MyOwnable {
         return false;
     }
 
-    /// @dev reverts if the element isn't found in the array 
+    /// @dev Checks if the element is in the array 
     function indexOf(address a, address[] memory all) 
         internal 
         pure 

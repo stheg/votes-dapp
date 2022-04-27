@@ -76,23 +76,23 @@ task("vote", "Adds a vote from the voter for the candidate")
         }
     });
 
-function delaySec(s) {
-    return new Promise(r => setTimeout(r, s * 1000));
-}
-
 task("finish-voting", "finishes the voting and rewards the winner")
     .addParam("vpa", "address of a voting platform")
     .addParam("voting", "id of the voting")
     .addOptionalParam("from", "address of the caller")
     .setAction(async (args, hre) => {
-        let caller = await getCaller(args.from);
+        const caller = await getCaller(args.from);
         const plt = await initPlatform(args.vpa, caller);
+
+        const [owner] = await hre.ethers.getSigners();
+        //owner waits for the event and then will do calculations
+        RunCalcHandlerAsync(plt, owner);
         
         try {
-            
             const votingId = parseInt(args.voting);
-            const tx = await plt.CalculateResults(votingId);
-            await finishHandler(plt, caller);
+            await plt.CalculateResults(votingId);
+            //caller waits for the event and then will finish the voting
+            await RunFinishHandlerAsync(plt, caller);
 
         } catch (err) {
             console.log(err.error ?? err);
@@ -114,60 +114,9 @@ task("withdraw", "transfers gathered comission to the owner")
         }
     });
 
-async function finishHandler(plt, caller) {
-    let votingId = -1;
-    plt.once("ReadyToFinish", (vId) => { votingId = vId });
-    while (votingId < 0) {
-        await delaySec(10);
-        console.log("###################################");
-    }
-    await plt.connect(caller).Finish(votingId);
-}
-
-async function calcHandler(plt) {
-    let votingId = -1;
-    plt.once("PendingForResults", (vId) => { votingId = vId; });
-
-    while (votingId < 0) {
-        await delaySec(10);
-        console.log("---------------------------------------");
-    }
-    plt.removeAllListeners("PendingForResults");
-    console.log("calculating results for " + votingId);
-    const [owner] = await hre.ethers.getSigners();
-    const v = await plt.connect(owner).GetVotingDetails(votingId);
-    const winner = calculateResults(v[0], v[1]);
-    console.log("winner is " + winner);
-    await plt.connect(owner).UpdateVotingResult(votingId, winner);
-}
-
-function calculateResults(voting, votes) {
-    let maxVal = 0;
-    let winnerIndex = 0;
-
-    let votesFor = [];
-    //init all candidates' votes numbers with Zeros (the order is important)
-    voting.candidates.forEach(c => votesFor.push(0));
-    //in case of equal numbers the first candidates will be the winner
-    //currently, the order defines the time when votes were registered
-    //another option is to extend the Vote structure to keep the date 
-    votes.forEach(vote => {
-        const candIndex = voting.candidates.findIndex(c => c == vote.candidate);
-        votesFor[candIndex]++;
-        //update the winner to avoid second for-loop
-        if (votesFor[candIndex] > maxVal) {
-            maxVal = votesFor[candIndex];
-            winnerIndex = candIndex;
-        } 
-    });
-
-    return winnerIndex;
-}
-
 async function initPlatform(address, acc) {
     const VotingPlatform = await hre.ethers.getContractFactory("VotingPlatform");
     const plt = await new hre.ethers.Contract(address, VotingPlatform.interface, acc);
-    calcHandler(plt);
     return plt;
 }
 
@@ -202,4 +151,68 @@ function formatVoting(voting) {
     console.log("   candidates: " + voting.candidates);
     console.log("   status: %s", voting.state);
     console.log("   winner: " + winner);
+}
+
+
+
+/// caller waits for the event and then will finish the voting
+async function RunFinishHandlerAsync(plt, caller) {
+    let votingId = -1;
+    plt.once("ReadyToFinish", (vId) => { votingId = vId });
+    while (votingId < 0) {
+        await delaySec(10);
+        //console.log("###################################");
+    }
+    await plt.connect(caller).Finish(votingId);
+}
+
+/// owner waits for the event and then will do calculations
+async function RunCalcHandlerAsync(plt, owner) {
+    let votingId = -1;
+    // use 'on' instead of 'once' + extra loop to handle all voting
+    // otherwise this function should be called for eachvoting separately
+    plt.once("PendingForResults", (vId) => { votingId = vId; });
+
+    while (votingId < 0) {
+        await delaySec(10);
+        // console.log("---------------------------------------");
+    }
+    plt.removeAllListeners("PendingForResults");
+
+    console.log("calculating results for the voting with index " + votingId);
+
+    const v = await plt.connect(owner).GetVotingDetails(votingId);
+    const winner = calculateResults(v[0], v[1]);
+    console.log("the winner is a candidate #" + winner+1);
+    await plt.connect(owner).UpdateVotingResult(votingId, winner);
+}
+
+function calculateResults(voting, votes) {
+    let maxVal = 0;
+    let winnerIndex = 0;
+
+    let votesFor = [];
+    //init all candidates' votes numbers with Zeros (the order is important)
+    voting.candidates.forEach(c => votesFor.push(0));
+    console.log(votesFor);
+
+    //in case of equal numbers the first candidates will be the winner
+    //currently, it depends on the order of votes 
+    //another option is to extend the Vote structure to keep the date and use it here 
+    votes.forEach(vote => {
+        const candIndex = voting.candidates.findIndex(c => c == vote.candidate);
+        votesFor[candIndex]++;
+        console.log(votesFor);
+        //update the winner to avoid second for-loop
+        if (votesFor[candIndex] > maxVal) {
+            maxVal = votesFor[candIndex];
+            winnerIndex = candIndex;
+        }
+    });
+
+    return winnerIndex;
+}
+
+function delaySec(s) {
+    return new Promise(r => setTimeout(r, s * 1000));
 }

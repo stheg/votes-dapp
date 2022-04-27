@@ -1,5 +1,4 @@
-const { expect, assert } = require("chai");
-const { BigNumber, FixedNumber } = require("ethers");
+const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
 describe("VotingPlatform", function() {
@@ -24,18 +23,16 @@ describe("VotingPlatform", function() {
     );
 
     it("should revert when ask for non-existent voting", async function () {
-        checkVotingShouldExist(() => vote(p1, cand1));
-        checkVotingShouldExist(() => votingPlt.Withdraw(0));
-        checkVotingShouldExist(() => votingPlt.GetVotingDetails(0));
-        checkVotingShouldExist(() => calcResults(owner));
-        checkVotingShouldExist(() => updResults(owner, 0));
-        checkVotingShouldExist(() => finish(p1));
+        await checkVotingShouldExist(() => vote(p1, cand1));
+        await checkVotingShouldExist(() => votingPlt.Withdraw(0));
+        await checkVotingShouldExist(() => votingPlt.GetVotingDetails(0));
+        await checkVotingShouldExist(() => calcResults(owner));
+        await checkVotingShouldExist(() => updResults(owner, 0));
+        await checkVotingShouldExist(() => finish(p1));
     });
 
     async function checkVotingShouldExist(f) {
-        await expect(f()).to.be.revertedWith(
-            "Voting doesn't exist"
-        )
+        await expect(f()).to.be.revertedWith("NoSuchVoting");
     }
 
     describe("Adding a new voting", function() {
@@ -53,10 +50,8 @@ describe("VotingPlatform", function() {
             )
         );
 
-        it("should require 2 candidates", async function () {
-            await expect(voting(owner, [])).to.be.revertedWith(
-                "needs candidates"
-            );
+        it("should require candidates", async function () {
+            await expect(voting(owner, [])).to.be.revertedWith("CandidatesRequired");
         });
 
         it("should be possible to have more than 1 voting", async function () {
@@ -90,7 +85,7 @@ describe("VotingPlatform", function() {
             await vote(p1, cand1);
 
             await expect(vote(p1, cand2)).to.be.revertedWith(
-                "Votes limit"
+                "VotesLimitExceeded"
             );
         });
 
@@ -98,7 +93,7 @@ describe("VotingPlatform", function() {
             await voting(owner, [cand1.address, cand2.address]);
 
             await expect(vote(p1, owner)).to.be.revertedWith(
-                "no such candidate"
+                "NoSuchCandidate"
             );
         });
 
@@ -111,7 +106,7 @@ describe("VotingPlatform", function() {
                 cand1.address, 
                 { value:wrongPrice }
             ))
-            .to.be.revertedWith("Wrong price");
+            .to.be.revertedWith("Wrong fee");
         });
     })
 
@@ -120,7 +115,7 @@ describe("VotingPlatform", function() {
             await voting(owner, [cand1.address, cand2.address]);
 
             await expect(calcResults(owner)).to.be.revertedWith(
-                "can't be finished yet"
+                "VotingIsStillInProcess"
             );
         });
 
@@ -128,7 +123,7 @@ describe("VotingPlatform", function() {
             await voting(owner, [cand1.address, cand2.address]);
 
             await expect(updResults(owner, 0)).to.be.revertedWith(
-                "voting doesn't expect updates"
+                "No updates expected"
             );
         });
 
@@ -136,7 +131,7 @@ describe("VotingPlatform", function() {
             await voting(owner, [cand1.address, cand2.address]);
 
             await expect(finish(owner)).to.be.revertedWith(
-                "voting isn't ready to finish"
+                "Not ready to finish"
             );
         });
 
@@ -149,7 +144,7 @@ describe("VotingPlatform", function() {
             await delaySec(duration);
 
             await expect(vote(p1, cand1)).to.be.revertedWith(
-                "Voting period ended"
+                "VotingPeriodEnded"
             );
         });
 
@@ -167,7 +162,7 @@ describe("VotingPlatform", function() {
             const vs = await votingPlt.GetVotings();
             expect(vs[0].state).eq(1);
             await expect(updResults(owner, 3))
-                .to.be.revertedWith("winner is out of boundaries");
+                .to.be.revertedWith("IndexIsOutOfBoundaries");
         });
 
         it("shouldn't calculate results 2nd time", async function () {
@@ -182,9 +177,38 @@ describe("VotingPlatform", function() {
                 .to.emit(votingPlt, "PendingForResults")
                 .withArgs(0);
             await expect(calcResults(p1))
-                .to.be.revertedWith("calculation was already requested");
+                .to.be.revertedWith("Calculation was already requested");
         });
 
+        it("should emit PendingForResults event", async function () {
+            let duration = 1;
+            this.timeout((duration + 1) * 1000);
+
+            const votingId = 0;
+
+            await votingPlt.SetDuration(duration);
+            await voting(owner, [cand1.address, cand2.address]);
+            await delaySec(duration);
+            await expect(calcResults(p2))
+                .to.emit(votingPlt, "PendingForResults")
+                .withArgs(votingId);
+        });
+
+        it("should emit ReadyToFinish event", async function () {
+            let duration = 2;
+            this.timeout((duration + 1) * 1000);
+
+            const votingId = 0;
+
+            await votingPlt.SetDuration(duration);
+            await voting(owner, [cand1.address, cand2.address]);
+            await vote(p1, cand1);
+            await delaySec(duration);
+            await calcResults(p2);
+            await expect(updResults(owner, 0))
+                .to.emit(votingPlt, "ReadyToFinish")
+                .withArgs(votingId);
+        });
 
         it("should finish simple voting and reward cand1", async function () {
             let duration = 2;
@@ -194,14 +218,8 @@ describe("VotingPlatform", function() {
             await voting(owner, [cand1.address, cand2.address]);
             await vote(p1, cand1);
             await delaySec(duration);
-            await expect(calcResults(p2))
-                .to.emit(votingPlt, "PendingForResults")
-                .withArgs(0);
-            const vs = await votingPlt.GetVotings();
-            expect(vs[0].state).eq(1);
-            await expect(updResults(owner, 0))
-                .to.emit(votingPlt, "ReadyToFinish")
-                .withArgs(0);
+            await calcResults(p2);
+            await updResults(owner, 0);
             const t = await finish(p2);
 
             await expect(() => t)
@@ -215,6 +233,8 @@ describe("VotingPlatform", function() {
         it("should finish complex voting and reward cand2", async function () {
             let duration = 5;
             this.timeout((duration + 1) * 1000);
+            
+            const votingId = 0;
 
             await votingPlt.SetDuration(duration);
             await voting(owner, [cand1.address, cand2.address, owner.address]);
@@ -223,17 +243,10 @@ describe("VotingPlatform", function() {
             await vote(p3, cand2);
             await vote(owner, owner);
             await delaySec(duration);
-            await expect(calcResults(p2))
-                .to.emit(votingPlt, "PendingForResults")
-                .withArgs(0);
-            const vs = await votingPlt.GetVotings();
-            expect(vs[0].state).eq(1);
-            await expect(updResults(owner, 1))
-                .to.emit(votingPlt, "ReadyToFinish")
-                .withArgs(0);
+            await calcResults(p2);
+            await updResults(owner, 1);//cand2
             const t = await finish(p2);
             
-            // ethers.utils.parseEther("0.04")
             let expBalanceAfterVotes = 40000000000000000n;
             await expect(() => t).to.changeEtherBalance(
                 cand2, 
@@ -244,43 +257,6 @@ describe("VotingPlatform", function() {
             expect(v[0].winner).eq(1);
             expect(v[0].state).eq(3);//finished
         });
-
-        // it("shouldn't finish 2nd time", async function () {
-        //     let duration = 2;
-        //     this.timeout((duration + 1) * 1000);
-
-        //     await votingPlt.SetDuration(duration);
-        //     await voting(owner, [cand1.address, cand2.address]);
-        //     await vote(p1, cand1);
-        //     await delaySec(duration);
-        //     await finish(p1)
-
-        //     await expect(finish(owner)).to.be.revertedWith("finished already");
-        // });
-
-        // it("should finish with the first winner when there are 2 winners", async function () {
-        //     let duration = 4;
-        //     this.timeout((duration + 1) * 1000);
-
-        //     await votingPlt.SetDuration(duration);
-        //     await voting(owner, [cand1.address, cand2.address, owner.address]);
-        //     await vote(p1, cand1);
-        //     await vote(p2, cand2);
-        //     await vote(p3, owner);
-        //     await delaySec(duration);
-        //     const t1 = await calcResults(p2);
-        //     expect(t1[0].state).eq(1);
-        //     const t = await updResults(p2, 0);
-        //     //const t = await finish(p2)
-
-        //     const refund = voteFee * 90 / 100
-        //     await expect(() => t)
-        //         .to.changeEtherBalances([p1, p2, p3], [refund, refund, refund])
-
-        //     let v = await votingPlt.GetVotingDetails(0);
-        //     expect(v[0].winner).eq(ethers.constants.AddressZero);
-        //     expect(v[0].state).eq(2);//finished
-        // });
     })
 
     describe("Withdrawing", function() {
@@ -288,24 +264,20 @@ describe("VotingPlatform", function() {
             await voting(owner, [cand1.address, cand2.address]);
 
             await expect(votingPlt.Withdraw(0))
-                .to.be.revertedWith("Voting isn't finished")
+                .to.be.revertedWith("Not finished")
         });
 
         it("should does nothing during withdraw if nobody voted", async () => {
             let duration = 2;
             this.timeout((duration + 1) * 1000);
-
+            
             await votingPlt.SetDuration(duration);
             await voting(owner, [cand1.address, cand2.address]);
-            await delaySec(duration + 1);
-            await expect(calcResults(p2))
-                .to.emit(votingPlt, "PendingForResults")
-                .withArgs(0);
+            await delaySec(duration);
+            await calcResults(p2);
             const vs = await votingPlt.GetVotings();
             expect(vs[0].state).eq(1);
-            await expect(updResults(owner, 0))
-                .to.emit(votingPlt, "ReadyToFinish")
-                .withArgs(0);
+            await updResults(owner, 0);
             await finish(p2);
 
             const t = await votingPlt.Withdraw(0);
@@ -322,14 +294,10 @@ describe("VotingPlatform", function() {
             await voting(owner, [cand1.address, cand2.address]);
             await vote(p1, cand1);
             await delaySec(duration);
-            await expect(calcResults(p2))
-                .to.emit(votingPlt, "PendingForResults")
-                .withArgs(0);
+            await calcResults(p2);
             const vs = await votingPlt.GetVotings();
             expect(vs[0].state).eq(1);
-            await expect(updResults(owner, 0))
-                .to.emit(votingPlt, "ReadyToFinish")
-                .withArgs(0);
+            await updResults(owner, 0);
             await finish(p2);
             
             const t = await votingPlt.Withdraw(0)
