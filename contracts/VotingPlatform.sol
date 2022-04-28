@@ -16,7 +16,8 @@ contract VotingPlatform is MyOwnable {
         PendingResults,
         ReadyToFinish,
         Finished,
-        Failed
+        ReadyToClose,
+        Closed
     }
 
     struct Voting {
@@ -128,10 +129,11 @@ contract VotingPlatform is MyOwnable {
         votingExists(vId)
     {
         Voting memory v = _votings[vId];
-        require(v.state == VotingState.InProcess, ERR_CALC_REQUESTED);
         if (v.endDate > block.timestamp)
             revert VotingIsStillInProcess();
-        
+
+        require(v.state == VotingState.InProcess, ERR_CALC_REQUESTED);
+
         _votings[vId].state = VotingState.PendingResults;
 
         emit PendingForResults(vId);
@@ -145,15 +147,16 @@ contract VotingPlatform is MyOwnable {
         onlyOwner
         votingExists(vId)
     {
+        if (winnerId >= _votings[vId].candidates.length) 
+            revert IndexIsOutOfBoundaries(winnerId);
         require(
             _votings[vId].state == VotingState.PendingResults, 
             ERR_NO_UPD_EXPECTED
         );
-        if (winnerId >= _votings[vId].candidates.length) 
-            revert IndexIsOutOfBoundaries(winnerId);
-
-        _votings[vId].winner = winnerId;
+        
         _votings[vId].state = VotingState.ReadyToFinish;
+        _votings[vId].winner = winnerId;
+        
 
         // it is split into 2 stages/functions to make it possible 
         // to verify the results outside and only then finish & reward
@@ -174,15 +177,17 @@ contract VotingPlatform is MyOwnable {
             _votings[vId].candidates[_votings[vId].winner], 
             vId
         );
+        _votings[vId].state = VotingState.ReadyToClose;
     }
 
     /// @notice The owner can withdraw the comission taken during the voting
     /// @param vId id of the voting
     function Withdraw(uint vId) external onlyOwner votingExists(vId) {
         require(
-            _votings[vId].state == VotingState.Finished, 
+            _votings[vId].state == VotingState.ReadyToClose, 
             ERR_NOT_FINISHED
         );
+        _votings[vId].state = VotingState.Closed;
         transfer(_balance[vId], _owner, vId);
     }
 

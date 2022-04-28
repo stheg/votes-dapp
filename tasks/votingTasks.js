@@ -1,7 +1,7 @@
 task("set-duration", "Sets how long all new votings will last")
     .addParam("vpa", "address of a voting platform")
     .addParam("seconds", "duration in seconds")
-    .addOptionalParam("from", "address of the caller")
+    .addOptionalParam("from", "address of a caller")
     .setAction(async (args) => {
         let caller = await getCaller(args.from);
         const plt = await initPlatform(args.vpa, caller);
@@ -11,7 +11,7 @@ task("set-duration", "Sets how long all new votings will last")
     
 task("add-voting", "Adds a new voting with candidates")
     .addParam("vpa", "address of a voting platform")
-    .addOptionalParam("from", "address of the caller")
+    .addOptionalParam("from", "address of a caller")
     .addOptionalVariadicPositionalParam("candidates", "list of candidates' addresses")
     .setAction(async function (args) {
         let caller = await getCaller(args.from);
@@ -23,7 +23,7 @@ task("add-voting", "Adds a new voting with candidates")
 
 task("get-votings", "Shows all votings")
     .addParam("vpa", "address of a voting platform")
-    .addOptionalParam("from", "address of the caller")
+    .addOptionalParam("from", "address of a caller")
     .setAction(async (args) => {
         let caller = await getCaller(args.from);
         const plt = await initPlatform(args.vpa, caller);
@@ -32,10 +32,10 @@ task("get-votings", "Shows all votings")
         votings.forEach(v => formatVoting(v));
     });
 
-task("get-details", "Shows details of the voting")
+task("get-details", "Shows details of a voting")
     .addParam("vpa", "address of a voting platform")
-    .addParam("voting", "id of the voting")
-    .addOptionalParam("from", "address of the caller")
+    .addParam("voting", "id of a voting")
+    .addOptionalParam("from", "address of a caller")
     .setAction(async (args) => {
         let caller = await getCaller(args.from);
         const plt = await initPlatform(args.vpa, caller);
@@ -54,11 +54,11 @@ task("get-details", "Shows details of the voting")
         }
     });
 
-task("vote", "Adds a vote from the voter for the candidate")
+task("vote", "Adds a vote from a voter for a candidate")
     .addParam("vpa", "address of a voting platform")
-    .addParam("voting", "id of the voting")
-    .addOptionalParam("candidate", "address of the candidate")
-    .addOptionalParam("from", "address of the caller")
+    .addParam("voting", "id of a voting")
+    .addOptionalParam("candidate", "address of a candidate")
+    .addOptionalParam("from", "address of a caller")
     .setAction(async (args) => {
         let caller = await getCaller(args.from);
         let candidate = args.candidate ?? caller.address;
@@ -76,10 +76,10 @@ task("vote", "Adds a vote from the voter for the candidate")
         }
     });
 
-task("finish-voting", "Finishes the voting and rewards the winner")
+task("finish-voting", "Finishes a voting and rewards its winner")
     .addParam("vpa", "address of a voting platform")
-    .addParam("voting", "id of the voting")
-    .addOptionalParam("from", "address of the caller")
+    .addParam("voting", "id of a voting")
+    .addOptionalParam("from", "address of a caller")
     .setAction(async (args, hre) => {
         const caller = await getCaller(args.from);
         const plt = await initPlatform(args.vpa, caller);
@@ -101,8 +101,8 @@ task("finish-voting", "Finishes the voting and rewards the winner")
 
 task("withdraw", "Transfers gathered comission to the owner")
     .addParam("vpa", "address of a voting platform")
-    .addParam("voting", "id of the voting")
-    .addOptionalParam("from", "address of the caller")
+    .addParam("voting", "id of a voting")
+    .addOptionalParam("from", "address of the owner")
     .setAction(async (args) => {
         let caller = await getCaller(args.from);
         const plt = await initPlatform(args.vpa, caller);

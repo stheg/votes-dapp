@@ -227,7 +227,7 @@ describe("VotingPlatform", function() {
             
             let v = await votingPlt.GetVotingDetails(0);
             expect(v[0].winner).eq(0);
-            expect(v[0].state).eq(3);//finished
+            expect(v[0].state).eq(4);//finished
         });
 
         it("should finish complex voting and reward cand2", async function () {
@@ -255,7 +255,7 @@ describe("VotingPlatform", function() {
 
             let v = await votingPlt.GetVotingDetails(0);
             expect(v[0].winner).eq(1);
-            expect(v[0].state).eq(3);//finished
+            expect(v[0].state).eq(4);//finished
         });
     })
 
