@@ -8,6 +8,8 @@ describe("VotingPlatform", function() {
     let votingPlt
     let voteFee = ethers.utils.parseEther("0.01")
 
+    const stateError = "Incorrect state for the action";
+
     beforeEach(async function() {
         [owner, cand1, cand2, p1, p2, p3] = await ethers.getSigners();
         const VotingPlatform = 
@@ -122,17 +124,13 @@ describe("VotingPlatform", function() {
         it("shouldn't update results until it expects changes", async () => {
             await voting(owner, [cand1.address, cand2.address]);
 
-            await expect(updResults(owner, 0)).to.be.revertedWith(
-                "No updates expected"
-            );
+            await expect(updResults(owner, 0)).to.be.revertedWith(stateError);
         });
 
         it("shouldn't finish until results are in place", async function () {
             await voting(owner, [cand1.address, cand2.address]);
 
-            await expect(finish(owner)).to.be.revertedWith(
-                "Not ready to finish"
-            );
+            await expect(finish(owner)).to.be.revertedWith(stateError);
         });
 
         it("shouldn't vote after end", async function () {
@@ -156,9 +154,7 @@ describe("VotingPlatform", function() {
             await voting(owner, [cand1.address, cand2.address]);
             await vote(p1, cand1);
             await delaySec(duration);
-            await expect(calcResults(p2))
-                .to.emit(votingPlt, "PendingForResults")
-                .withArgs(0);
+            await calcResults(p2);
             const vs = await votingPlt.GetVotings();
             expect(vs[0].state).eq(1);
             await expect(updResults(owner, 3))
@@ -173,14 +169,11 @@ describe("VotingPlatform", function() {
             await voting(owner, [cand1.address, cand2.address]);
             await vote(p1, cand1);
             await delaySec(duration);
-            await expect(calcResults(p2))
-                .to.emit(votingPlt, "PendingForResults")
-                .withArgs(0);
-            await expect(calcResults(p1))
-                .to.be.revertedWith("Calculation was already requested");
+            await calcResults(p2);
+            await expect(calcResults(p1)).to.be.revertedWith(stateError);
         });
 
-        it("should emit PendingForResults event", async function () {
+        it("should emit event for pending results", async function () {
             let duration = 1;
             this.timeout((duration + 1) * 1000);
 
@@ -190,8 +183,8 @@ describe("VotingPlatform", function() {
             await voting(owner, [cand1.address, cand2.address]);
             await delaySec(duration);
             await expect(calcResults(p2))
-                .to.emit(votingPlt, "PendingForResults")
-                .withArgs(votingId);
+                .to.emit(votingPlt, "StateChanged")
+                .withArgs(0, 1);//pending results
         });
 
         it("should emit ReadyToFinish event", async function () {
@@ -206,8 +199,8 @@ describe("VotingPlatform", function() {
             await delaySec(duration);
             await calcResults(p2);
             await expect(updResults(owner, 0))
-                .to.emit(votingPlt, "ReadyToFinish")
-                .withArgs(votingId);
+                .to.emit(votingPlt, "StateChanged")
+                .withArgs(0, 2);//ready to finish
         });
 
         it("should finish simple voting and reward cand1", async function () {
@@ -263,8 +256,7 @@ describe("VotingPlatform", function() {
         it("shouldn't withdraw if voting isn't finished", async function () {
             await voting(owner, [cand1.address, cand2.address]);
 
-            await expect(votingPlt.Withdraw(0))
-                .to.be.revertedWith("Not finished")
+            await expect(votingPlt.Withdraw(0)).to.be.revertedWith(stateError);
         });
 
         it("should does nothing during withdraw if nobody voted", async () => {

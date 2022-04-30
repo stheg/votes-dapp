@@ -2,6 +2,8 @@
 pragma solidity ^0.8.13;
 
 import "./MyOwnable.sol";
+import "./VWallet.sol";
+import "./VoteKeeper.sol";
 
 /// @title Voting Platform
 /// @author Mad Aekauq
@@ -9,7 +11,7 @@ import "./MyOwnable.sol";
 /// and gives to users a possibility to vote for candidates, to request
 /// results (when voting period ended) and, after the owner updates the results,
 /// to finish votings rewarding the winners.
-contract VotingPlatform is MyOwnable {
+contract VotingPlatform is MyOwnable, VWallet, VoteKeeper {
     
     enum VotingState {
         InProcess,
@@ -26,28 +28,18 @@ contract VotingPlatform is MyOwnable {
         VotingState state;
         address[] candidates;
     }
-    
-    struct Vote {
-        address owner;
-        address candidate;
-    }
 
     error NoSuchVoting();
-    error CandidatesRequired();
-    error VotingPeriodEnded();
-    error VotesLimitExceeded();
-    error NoSuchCandidate();
     error VotingIsStillInProcess();
+    error VotingPeriodEnded();
+    error CandidatesRequired();
+    error NoSuchCandidate();
     error IndexIsOutOfBoundaries(uint index);
 
     string constant ERR_WRONG_FEE = "Wrong fee";
-    string constant ERR_CALC_REQUESTED = "Calculation was already requested";
-    string constant ERR_NO_UPD_EXPECTED = "No updates expected";
-    string constant ERR_NOT_READY_TO_FINISH = "Not ready to finish";
-    string constant ERR_NOT_FINISHED = "Not finished";
+    string constant ERR_INCORRECT_STATE = "Incorrect state for the action";
 
-    event PendingForResults(uint indexed vId);
-    event ReadyToFinish(uint indexed vId);
+    event StateChanged(uint indexed objId, VotingState indexed state);
 
     uint private _votingDuration = 3 days;
     uint private _voteFee = 0.01 ether;
@@ -55,13 +47,19 @@ contract VotingPlatform is MyOwnable {
 
     Voting[] private _votings;
     
-    mapping(uint => uint) private _balance;//vId => balance
-    mapping(uint => Vote[]) private _givenVotes;//vId => givenVotes
-
     modifier votingExists(uint id) {
         if(id >= _votings.length)
             revert NoSuchVoting();
         _;
+    }
+
+    modifier changeState(uint vId, VotingState expected, VotingState next) {
+        require(_votings[vId].state == expected, ERR_INCORRECT_STATE);
+        _votings[vId].state = next;
+        
+        _;
+
+        emit StateChanged(vId, _votings[vId].state);
     }
 
     /// @notice The owner can set a duration for new votings
@@ -80,7 +78,7 @@ contract VotingPlatform is MyOwnable {
         votingExists(id)
         returns (Voting memory voting, Vote[] memory votes) 
     {
-        return (_votings[id], _givenVotes[id]);
+        return (_votings[id], GetVotes(id));
     }
 
     /// @notice Returns all votings in order they were created
@@ -112,31 +110,21 @@ contract VotingPlatform is MyOwnable {
         require(msg.value == _voteFee, ERR_WRONG_FEE);
         if (_votings[vId].endDate <= block.timestamp)
             revert VotingPeriodEnded();
-        if (hasAlreadyVoted(msg.sender, _givenVotes[vId]))
-            revert VotesLimitExceeded();
-        (,bool found) = indexOf(candidate, _votings[vId].candidates);
-        if (!found) 
+        if (!candidateExists(candidate, _votings[vId].candidates)) 
             revert NoSuchCandidate();
 
-        _givenVotes[vId].push(Vote(msg.sender, candidate));
-        _balance[vId] += msg.value;
+        AddNewVote(vId, msg.sender, candidate);
+        AddToBalance(vId, msg.value);
     }
 
-    /// @notice Checks if the voting period ended, changes the state
-    /// and emits a PendingForResults event to notify the owner or someone else
+    /// @notice Makes the voting
     function CalculateResults(uint vId) 
         external 
         votingExists(vId)
+        changeState(vId, VotingState.InProcess, VotingState.PendingResults)
     {
-        Voting memory v = _votings[vId];
-        if (v.endDate > block.timestamp)
+        if (_votings[vId].endDate > block.timestamp)
             revert VotingIsStillInProcess();
-
-        require(v.state == VotingState.InProcess, ERR_CALC_REQUESTED);
-
-        _votings[vId].state = VotingState.PendingResults;
-
-        emit PendingForResults(vId);
     }
 
     /// @notice The owner can update results of the voting.
@@ -146,88 +134,56 @@ contract VotingPlatform is MyOwnable {
         external
         onlyOwner
         votingExists(vId)
+        changeState(
+            vId, 
+            VotingState.PendingResults, 
+            VotingState.ReadyToFinish
+        )
     {
         if (winnerId >= _votings[vId].candidates.length) 
             revert IndexIsOutOfBoundaries(winnerId);
-        require(
-            _votings[vId].state == VotingState.PendingResults, 
-            ERR_NO_UPD_EXPECTED
-        );
-        
-        _votings[vId].state = VotingState.ReadyToFinish;
-        _votings[vId].winner = winnerId;
-        
 
-        // it is split into 2 stages/functions to make it possible 
-        // to verify the results outside and only then finish & reward
-        emit ReadyToFinish(vId);
+        _votings[vId].winner = winnerId;
     }
 
     /// @notice Finishes the voting
     /// @param vId id of the voting
-    function Finish(uint vId) public votingExists(vId) {
-        require(
-            _votings[vId].state == VotingState.ReadyToFinish, 
-            ERR_NOT_READY_TO_FINISH
-        );
-
-        _votings[vId].state = VotingState.Finished;
-        transfer(
-            applyComission(_balance[vId]), 
+    function Finish(uint vId) 
+        public 
+        votingExists(vId)
+        changeState(vId, VotingState.ReadyToFinish, VotingState.Finished)
+    {
+        Transfer(
+            vId,
             _votings[vId].candidates[_votings[vId].winner], 
-            vId
+            applyComission(GetBalance(vId))
         );
+        
         _votings[vId].state = VotingState.ReadyToClose;
     }
 
     /// @notice The owner can withdraw the comission taken during the voting
     /// @param vId id of the voting
-    function Withdraw(uint vId) external onlyOwner votingExists(vId) {
-        require(
-            _votings[vId].state == VotingState.ReadyToClose, 
-            ERR_NOT_FINISHED
-        );
-        _votings[vId].state = VotingState.Closed;
-        transfer(_balance[vId], _owner, vId);
-    }
-
-    /// @dev Transfers the amount from the voting balance. DRY
-    function transfer(uint amount, address to, uint vId) internal {
-        if (amount == 0)
-            return;
-        // should we?
-        // if (to == address(0))
-        //     revert();
-        _balance[vId] -= amount;
-        payable(to).transfer(amount);
-    }
-
-    /// @dev Checks if the voter has already voted   
-    function hasAlreadyVoted(address voter, Vote[] memory votes) 
-        internal
-        virtual
-        pure
-        returns (bool)
+    function Withdraw(uint vId) 
+        external 
+        onlyOwner 
+        votingExists(vId) 
+        changeState(vId, VotingState.ReadyToClose, VotingState.Closed)
     {
-        for (uint i = 0; i < votes.length; i++) {
-            if (votes[i].owner == voter) {
-                return true; 
-            }
-        }
-        return false;
+        Transfer(vId, _owner, GetBalance(vId));
     }
 
     /// @dev Checks if the element is in the array 
-    function indexOf(address a, address[] memory all) 
+    function candidateExists(address a, address[] memory all) 
         internal 
         pure 
-        returns (uint, bool)
+        returns (bool)
     {
         for (uint i = 0; i < all.length; i++) {
             if (all[i] == a)
-                return (i, true);//found
+                return true;
         }
-        return (0, false);//not found
+        return false;
     }
 
     /// @dev DRY

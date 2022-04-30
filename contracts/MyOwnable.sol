@@ -1,6 +1,9 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.13;
 
+/// @title Ownable
+/// @author Mad Aekauq
+/// @notice Simple ownable logic
 contract MyOwnable {
     address internal _owner;
 
