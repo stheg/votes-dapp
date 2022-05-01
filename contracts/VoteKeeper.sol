@@ -22,7 +22,7 @@ contract VoteKeeper {
 
     /// @notice Checks if can be added and then adds a new vote
     /// @param votingId id of the voting
-    /// @param candidate address of the existing candidate
+    /// @param candidate address
     function AddNewVote(uint votingId, address voter, address candidate) 
         internal
     {

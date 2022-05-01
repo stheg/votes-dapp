@@ -7,11 +7,6 @@ pragma solidity ^0.8.13;
 contract VWallet {
     mapping(uint => uint) private _accounts;
 
-    //TODO: implement modifier and use 'public' instead of 'internal'
-    // modifier canChangeBalance(address caller) {
-    //     //TODO: checks if caller can change balances and do transferring
-    // }
-
     /// @notice Returns the balance of the specified account
     function GetBalance(uint accountId) public view returns (uint) {
         return _accounts[accountId];

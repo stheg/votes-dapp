@@ -47,7 +47,6 @@ describe("VotingPlatform", function() {
                     const v = vs[0];
                     expect(v.candidates[0]).eq(cand1.address);
                     expect(v.candidates[1]).eq(cand2.address);
-                    expect(v.state).eq(0);
                 }
             )
         );
@@ -95,7 +94,7 @@ describe("VotingPlatform", function() {
             await voting(owner, [cand1.address, cand2.address]);
 
             await expect(vote(p1, owner)).to.be.revertedWith(
-                "NoSuchCandidate"
+                "No such candidate"
             );
         });
 
@@ -117,7 +116,7 @@ describe("VotingPlatform", function() {
             await voting(owner, [cand1.address, cand2.address]);
 
             await expect(calcResults(owner)).to.be.revertedWith(
-                "VotingIsStillInProcess"
+                "Voting is still in process"
             );
         });
 
@@ -142,7 +141,7 @@ describe("VotingPlatform", function() {
             await delaySec(duration);
 
             await expect(vote(p1, cand1)).to.be.revertedWith(
-                "VotingPeriodEnded"
+                "Voting period ended"
             );
         });
 
@@ -155,8 +154,6 @@ describe("VotingPlatform", function() {
             await vote(p1, cand1);
             await delaySec(duration);
             await calcResults(p2);
-            const vs = await votingPlt.GetVotings();
-            expect(vs[0].state).eq(1);
             await expect(updResults(owner, 3))
                 .to.be.revertedWith("IndexIsOutOfBoundaries");
         });
@@ -220,7 +217,6 @@ describe("VotingPlatform", function() {
             
             let v = await votingPlt.GetVotingDetails(0);
             expect(v[0].winner).eq(0);
-            expect(v[0].state).eq(4);//finished
         });
 
         it("should finish complex voting and reward cand2", async function () {
@@ -248,7 +244,6 @@ describe("VotingPlatform", function() {
 
             let v = await votingPlt.GetVotingDetails(0);
             expect(v[0].winner).eq(1);
-            expect(v[0].state).eq(4);//finished
         });
     })
 
@@ -267,8 +262,6 @@ describe("VotingPlatform", function() {
             await voting(owner, [cand1.address, cand2.address]);
             await delaySec(duration);
             await calcResults(p2);
-            const vs = await votingPlt.GetVotings();
-            expect(vs[0].state).eq(1);
             await updResults(owner, 0);
             await finish(p2);
 
@@ -287,8 +280,6 @@ describe("VotingPlatform", function() {
             await vote(p1, cand1);
             await delaySec(duration);
             await calcResults(p2);
-            const vs = await votingPlt.GetVotings();
-            expect(vs[0].state).eq(1);
             await updResults(owner, 0);
             await finish(p2);
             
