@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 /// @title Vote Keeper
 /// @author Mad Aekauq
-/// @notice Keeps and registers new votes
+/// @notice Allows to keeps and control new votes
 contract VoteKeeper {
 
     struct Vote {

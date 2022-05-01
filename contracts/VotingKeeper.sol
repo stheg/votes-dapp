@@ -1,12 +1,10 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.13;
 
-import "./MyOwnable.sol";
-
 /// @title Voting Keeper
 /// @author Mad Aekauq
-/// @notice Keeps and registers new votings
-contract VotingKeeper is MyOwnable {
+/// @notice Allows to keeps and control new votings
+contract VotingKeeper {
 
     struct Voting {
         uint endDate;
@@ -19,7 +17,6 @@ contract VotingKeeper is MyOwnable {
     error CandidatesRequired();
     error IndexIsOutOfBoundaries(uint index);
     
-    uint private _votingDuration = 3 days;
     Voting[] private _votings;
 
     /// @notice Reverts if a voting isn't found
@@ -27,12 +24,6 @@ contract VotingKeeper is MyOwnable {
         if(id >= _votings.length)
             revert NoSuchVoting();
         _;
-    }
-
-    /// @notice The owner can set a duration for all new votings
-    /// @param newDuration a new duration (in seconds) for all new votings
-    function SetDuration(uint newDuration) external onlyOwner {
-        _votingDuration = newDuration;
     }
 
     /// @notice Returns all votings in order they were created
@@ -45,14 +36,14 @@ contract VotingKeeper is MyOwnable {
         return _votings[id];
     }
 
-    /// @notice The owner can start a new voting, reverts if no candidates
+    /// @notice Generates a new voting, reverts if no candidates
     /// @param candidates a list of candidates' addresses
-    function AddVoting(address[] memory candidates) public onlyOwner {
+    function AddNewVoting(address[] memory candidates, uint duration) internal {
         if (candidates.length == 0)
             revert CandidatesRequired();
         
         Voting memory newOne;
-        newOne.endDate = block.timestamp + _votingDuration;
+        newOne.endDate = block.timestamp + duration;
         newOne.candidates = candidates;
         _votings.push(newOne);
     }

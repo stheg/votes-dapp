@@ -1,10 +1,10 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.13;
 
-/// @title Voting State Machine
+/// @title Voting State Keeper
 /// @author Mad Aekauq
-/// @notice Allows to control states of votings 
-contract VStateMachine {
+/// @notice Allows to keep and control states of votings 
+contract VStateKeeper {
 
     enum VotingState {
         InProcess,

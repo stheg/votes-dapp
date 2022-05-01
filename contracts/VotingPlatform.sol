@@ -5,7 +5,7 @@ import "./MyOwnable.sol";
 import "./VWallet.sol";
 import "./VoteKeeper.sol";
 import "./VotingKeeper.sol";
-import "./VStateMachine.sol";
+import "./VStateKeeper.sol";
 
 /// @title Voting Platform
 /// @author Mad Aekauq
@@ -18,15 +18,23 @@ contract VotingPlatform is
     VWallet, 
     VotingKeeper, 
     VoteKeeper,
-    VStateMachine 
+    VStateKeeper 
 {
     string constant ERR_WRONG_FEE = "Wrong fee";
     string constant ERR_VOTING_PERIOD_ENDED = "Voting period ended";
     string constant ERR_VOTING_IS_IN_PROCESS = "Voting is still in process";
     string constant ERR_NO_SUCH_CANDIDATE = "No such candidate";
 
+    uint private _votingDuration = 3 days;
     uint private _voteFee = 0.01 ether;
     uint private _comission = 10;//%
+
+
+    /// @notice The owner can set a duration for all new votings
+    /// @param newDuration a new duration (in seconds) for all new votings
+    function SetDuration(uint newDuration) external onlyOwner {
+        _votingDuration = newDuration;
+    }
 
     /// @notice Returns all details about the requested voting
     /// @param id id of the voting
@@ -39,6 +47,12 @@ contract VotingPlatform is
         returns (Voting memory voting, Vote[] memory votes) 
     {
         return (GetVoting(id), GetVotes(id));
+    }
+
+    /// @notice The owner can start a new voting
+    /// @param candidates a list of candidates' addresses
+    function AddVoting(address[] memory candidates) external onlyOwner {
+        AddNewVoting(candidates, _votingDuration);
     }
 
     /// @notice Adds the vote and accumulates the reward
